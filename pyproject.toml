@@ -4,7 +4,9 @@ version = "0.1.0"
 readme = "README.md"
 requires-python = ">=3.13"
 authors = [{ name = "Amodh Dhakal", email = "amodhakal@gmail.com" }]
-dependencies = []
+dependencies = [
+    "matplotlib>=3.11.2",
+]
 
 [project.scripts]
 vecsearch = "vecsearch:main"

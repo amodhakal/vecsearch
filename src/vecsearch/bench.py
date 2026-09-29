@@ -9,6 +9,7 @@ from pathlib import Path
 from vecsearch.io import load_normalized_data
 from vecsearch.knn import KNN
 from vecsearch.metric import CosineSimilarityMetric, Metric
+from vecsearch.rpforest import RPForest
 
 DATAPATH = "data/glove.6B.100d.txt"
 CACHE = Path("data")
@@ -76,6 +77,9 @@ def get_truth(data, percent, n_queries, k, seed):
 
 def evaluate(index, counter, queries, truth, k, **params):
     counter.calls = 0
+    if hasattr(index, "plane_evals"):  # only tree indexes have this
+        index.plane_evals = 0
+
     hits = 0
     t0 = time.perf_counter()
     for q in queries:
@@ -84,10 +88,14 @@ def evaluate(index, counter, queries, truth, k, **params):
     elapsed = time.perf_counter() - t0
 
     n = len(queries)
+    dist = counter.calls / n
+    planes = getattr(index, "plane_evals", 0) / n
     return {
         "recall": hits / (n * k),
         "qps": n / elapsed,
-        "dist_per_query": counter.calls / n,
+        "dist_per_query": dist,
+        "plane_per_query": planes,
+        "total_per_query": dist + planes,  # compare indexes on this one
     }
 
 
@@ -114,6 +122,11 @@ def main() -> None:
     # Register indexes here: (name, build_fn, list_of_search_param_dicts)
     runs = [
         ("knn", lambda: KNN(data, counter), [{}]),
+        (
+            "rpforest",
+            lambda: RPForest(data, counter, n_trees=10, leaf_size=32),
+            [{"search_k": s} for s in (100, 300, 1000, 3000)],
+        ),
         # ("nsw", lambda: NSW(data, counter, M=16), [{"ef": e} for e in (10, 20, 50, 100)]),
     ]
 
@@ -137,8 +150,8 @@ def main() -> None:
             with log_path.open("a") as f:
                 f.write(json.dumps(row) + "\n")
             print(
-                f"{name:6} {str(params):16} recall@{args.k}={r['recall']:.3f} "
-                f"qps={r['qps']:.1f} dist/q={r['dist_per_query']:.0f}"
+                f"{name:8} {str(params):18} recall@{args.k}={r['recall']:.3f} "
+                f"qps={r['qps']:.1f} total/q={r['total_per_query']:.0f}"
             )
 
     print(f"Results written to {log_path}")
