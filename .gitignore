@@ -10,4 +10,4 @@ wheels/
 .venv
 
 # Custom
-data/
+data/glove.*

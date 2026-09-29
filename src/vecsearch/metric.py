@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import math
 
 
 class Metric(ABC):
@@ -8,4 +9,4 @@ class Metric(ABC):
 
 class CosineSimilarityMetric(Metric):
     def __call__(self, vec1, vec2):
-        return sum(a * b for a, b in zip(vec1, vec2))
+        return math.sumprod(vec1, vec2)

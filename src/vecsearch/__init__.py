@@ -16,7 +16,7 @@ def main() -> None:
 
     k_value = int(input("How many?: "))
     while True:
-        target_word = input("Word: ")
+        target_word = input("Word: ").lower()
 
         try:
             result = knn.find_closest(target_word, k_value)
