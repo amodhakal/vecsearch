@@ -3,10 +3,11 @@ import json
 import random
 import re
 import time
+import numpy as np
 from datetime import datetime
 from pathlib import Path
 
-from vecsearch.hnsw import HNSW
+from vecsearch.hnsw_np import HNSWNP
 from vecsearch.io import load_normalized_data
 from vecsearch.knn import KNN
 from vecsearch.metric import CosineSimilarityMetric, Metric
@@ -80,6 +81,12 @@ def evaluate(index, counter, queries, truth, k, **params):
     counter.calls = 0
     if hasattr(index, "plane_evals"):  # only tree indexes have this
         index.plane_evals = 0
+    # numpy-indexed indexes score a whole neighbor list in one matvec, which
+    # CountingMetric cannot see. They tally their own vector-scored count
+    # (HNSWNP.dist_evals), the same way RPForest tallies plane_evals.
+    has_batched = hasattr(index, "dist_evals")
+    if has_batched:
+        index.dist_evals = 0
 
     hits = 0
     t0 = time.perf_counter()
@@ -89,7 +96,8 @@ def evaluate(index, counter, queries, truth, k, **params):
     elapsed = time.perf_counter() - t0
 
     n = len(queries)
-    dist = counter.calls / n
+    batched = (index.dist_evals / n) if has_batched else 0.0
+    dist = counter.calls / n + batched
     planes = getattr(index, "plane_evals", 0) / n
     return {
         "recall": hits / (n * k),
@@ -102,7 +110,7 @@ def evaluate(index, counter, queries, truth, k, **params):
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--percent", type=float, default=0.05)  # 5% = 20k vectors
+    ap.add_argument("--percent", type=float, default=0.5)  # 50% = 200k vectors
     ap.add_argument("--queries", type=int, default=200)
     ap.add_argument("--k", type=int, default=10)
     ap.add_argument("--seed", type=int, default=0)
@@ -128,18 +136,33 @@ def main() -> None:
             lambda: RPForest(data, counter, n_trees=10, leaf_size=32),
             [{"search_k": s} for s in (100, 300, 1000, 3000)],
         ),
+        # (
+        #     "hnsw",
+        #     lambda: HNSW(data, counter, M=16, ef_construction=100),
+        #     [{"ef": e} for e in (5, 10, 20, 50, 100, 200)],
+        # ),
+        # Same graph as hnsw, contiguous numpy store, batched scoring. Both
+        # dtypes are swept as separate curves because float32 does not merely
+        # round the float64 graph: it changes which links _select accepts.
         (
-            "hnsw",
-            lambda: HNSW(data, counter, M=16, ef_construction=100),
-            [{"ef": e} for e in (10, 20, 50, 100, 200)],
+            "hnsw_np_f32",
+            lambda: HNSWNP(data, M=16, ef_construction=100, dtype=np.float32),
+            [{"ef": e} for e in (5, 10, 20, 50, 100, 200)],
         ),
+        # (
+        #     "hnsw_np_f64",
+        #     lambda: HNSWNP(data, M=16, ef_construction=100, dtype="float64"),
+        #     [{"ef": e} for e in (5, 10, 20, 50, 100, 200)],
+        # ),
     ]
 
     for name, build, sweeps in runs:
         t0 = time.perf_counter()
         index = build()
         build_s = time.perf_counter() - t0
-        build_dist = counter.calls
+        # hnsw_np scores in batched matvecs that CountingMetric never sees, so
+        # fold in the index's own tally or its build cost would read as zero.
+        build_dist = counter.calls + getattr(index, "dist_evals", 0)
         for params in sweeps:
             r = evaluate(index, counter, queries, truth, args.k, **params)
             row = {

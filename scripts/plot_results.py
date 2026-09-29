@@ -122,7 +122,7 @@ def main() -> None:
     ax.set_ylim(55, 7000)
     ax.set_xlabel("recall@10 vs exact KNN")
     ax.set_ylabel("Throughput (queries per second, log scale)")
-    ax.set_title("Throughput vs recall — GloVe 6B 100d, 20K vectors, 200 queries")
+    ax.set_title("Throughput vs recall — GloVe 6B 100d, 200K vectors, 200 queries")
     ax.grid(True, which="both", alpha=0.25, linewidth=0.5)
     ax.legend(loc="upper left", frameon=False)
 

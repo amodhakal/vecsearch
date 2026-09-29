@@ -444,7 +444,11 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "matplotlib" },
+    { name = "numpy" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "matplotlib", specifier = ">=3.11.2" }]
+requires-dist = [
+    { name = "matplotlib", specifier = ">=3.11.2" },
+    { name = "numpy", specifier = ">=2.5" },
+]
