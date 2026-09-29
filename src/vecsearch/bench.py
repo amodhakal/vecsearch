@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from vecsearch.hnsw import HNSW
 from vecsearch.io import load_normalized_data
 from vecsearch.knn import KNN
 from vecsearch.metric import CosineSimilarityMetric, Metric
@@ -127,13 +128,18 @@ def main() -> None:
             lambda: RPForest(data, counter, n_trees=10, leaf_size=32),
             [{"search_k": s} for s in (100, 300, 1000, 3000)],
         ),
-        # ("nsw", lambda: NSW(data, counter, M=16), [{"ef": e} for e in (10, 20, 50, 100)]),
+        (
+            "hnsw",
+            lambda: HNSW(data, counter, M=16, ef_construction=100),
+            [{"ef": e} for e in (10, 20, 50, 100, 200)],
+        ),
     ]
 
     for name, build, sweeps in runs:
         t0 = time.perf_counter()
         index = build()
         build_s = time.perf_counter() - t0
+        build_dist = counter.calls
         for params in sweeps:
             r = evaluate(index, counter, queries, truth, args.k, **params)
             row = {
@@ -145,6 +151,7 @@ def main() -> None:
                 "k": args.k,
                 "seed": args.seed,
                 "build_s": round(build_s, 2),
+                "build_dist": build_dist,
                 **{a: round(b, 4) for a, b in r.items()},
             }
             with log_path.open("a") as f:
